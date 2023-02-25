@@ -6,14 +6,26 @@
     <meta name="viewport"
         content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0" />
     <link rel="stylesheet" type="text/css" href="main.css">
+    <script type="module" src="./constants/Version.js"></script>
+    <script type="module" src="./constants/ParseRule.js"></script>
+    <script type="module" src="./constants/PaperSize.js"></script>
+    <script type="module" src="./util/ViewUtil.js"></script>
+    <script type="module" src="./util/Util.js"></script>
+    <script type="module" src="./service/MainView.js"></script>
+    <script type="module" src="./service/TextEditor.js"></script>
+    <script type="module" src="./service/MainMenu.js"></script>
+    <script type="module" src="./service/PagesView.js"></script>
     <script type="module" src="./naimuchaaan.js"></script>
     <!-- <script src="./QRcode.Origin.js"></script> -->
     <title>TweetImagesAsFileConverter</title>
 </head>
 
 <body>
-    <div class="container">
-    </div>
+    <script type="module">
+        import { NaimuChaaan } from './naimuchaaan.js'
+        NaimuChaaan.exec();
+    </script>
 </body>
+
 
 </html>
