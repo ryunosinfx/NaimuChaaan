@@ -1,4 +1,4 @@
-import { R, REGEXs } from '../constants/ParseRule.js';
+import { R, REGEXs, INITIAL_MAP, NUMERIC, SINGLE, ATTR } from '../constants/ParseRule.js';
 import { A4 } from '../constants/PaperSize.js';
 import { Util } from './Util.js';
 export class MangaNaimuParser {
@@ -9,7 +9,7 @@ export class MangaNaimuParser {
 	static parse(text = '') {
 		const rows = text.split(REGEXs.CRLF);
 		const cond = { page: 0, koma: 0, fukidashi: 0 };
-		const result = {};
+		const result = { titles: [] };
 		const currentParents = {
 			title: null,
 			page: null,
@@ -26,17 +26,27 @@ export class MangaNaimuParser {
 		const len = rows.length;
 		for (let i = 0; i < len; i++) {
 			const row = rows[i];
+			console.log('parse infoA row:', row);
 			const STATUS = MangaNaimuParser.parseSateOfRow(row);
 			let isStatusChange = false;
 			const info = MangaNaimuParser.buildInfo(row);
-			console.log('info STATUS:' + STATUS, info);
+			console.log('parse infoB STATUS:' + STATUS, info);
 			if (STATUS !== R.STATUS.NONE) {
-				const cmd = MangaNaimuParser.parseCommand(STATUS, info.main);
+				const cmd = MangaNaimuParser.parseCommand(STATUS, info[ATTR.MAIN]);
 				if (STATUS === R.STATUS.TITLE) {
 					cond.page = 0;
 					cond.koma = 0;
 					cond.fukidashi = 0;
+					if (
+						currentParents.title &&
+						(result.titles.length < 1 ||
+							(result.titles.length > 0 &&
+								result.titles[result.titles.length - 1] !== currentParents.title))
+					) {
+						result.titles.push(currentParents.title);
+					}
 					currentParents.cmd = cmd;
+					currentParents.title = cmd;
 					currentParents.title = cmd;
 					for (const page of currentParents.ofanPages) {
 						cmd.pages.push(page);
@@ -92,36 +102,43 @@ export class MangaNaimuParser {
 				cmd.page = cond.page;
 				cmd.koma = cond.koma;
 				cmd.fukidashi = cond.fukidashi;
-				cmd.comment = info.comment;
+				cmd.comment = info[ATTR.COMMENT];
 
 				for (const message of currentParents.ofanMessages) {
-					cmd.messages.push(message);
+					cmd[ATTR.MESSAGES].push(message);
 				}
 				Util.clear(currentParents.ofanMessages);
 			} else if (currentParents.cmd) {
-				currentParents.cmd.messages.push(row);
+				currentParents.cmd[ATTR.MESSAGES].push(info);
 			}
 			if (!isStatusChanged || !currentParents.cmd) {
-				currentParents.ofanMessages.push(row);
+				currentParents.ofanMessages.push(info);
 				continue;
 			}
 		}
-		if (currentParents.title) {
-			result.title = currentParents.title;
+		if (
+			currentParents.title &&
+			(result.titles.length < 1 ||
+				(result.titles.length > 0 && result.titles[result.titles.length - 1] !== currentParents.title))
+		) {
+			result.titles.push(currentParents.title);
 		}
 		return result;
 	}
 	static buildInfo(row) {
-		const info = { main: row, comment: '' };
-		if (REGEXs.formatComment.test(row)) {
+		const info = {};
+		info[ATTR.MAIN] = row;
+		info[ATTR.COMMENT] = '';
+		if (REGEXs.comment.test(row)) {
 			const tokens = row.split('&').join('&amp;').split('://').join('&#58;&#47;&#47;').split('//');
-			info.main = tokens.shift();
-			info.comment = tokens.join('//').split('&#58;&#47;&#47;').join('://').split('&amp;').join('&');
+			info[ATTR.MAIN] = tokens.shift();
+			info[ATTR.COMMENT] = tokens.join('//').split('&#58;&#47;&#47;').join('://').split('&amp;').join('&');
 		}
 		return info;
 	}
 	static parseCommand(status, cmdText) {
 		const cmdLine = cmdText.split(' ').join('').split(/\t/).join('　').split(/\t/).join('');
+		console.log('parseCommand cmdLine:' + cmdLine, cmdText);
 		if (status === R.STATUS.TITLE) {
 			return MangaNaimuParser.parseCmdLineTitle(cmdLine);
 		}
@@ -140,46 +157,75 @@ export class MangaNaimuParser {
 	}
 	static parseCmdLineTitle(cmdLine) {
 		console.log('parseCmdLineTitle cmdLine:' + cmdLine);
-		const match = cmdLine.match(REGEXs.formatTitle);
-		const dataText = match[1];
-		const tokens = dataText ? dataText.split('0') : [];
-		return {
-			pageStart:
-				tokens.length > 0
-					? tokens[0] === 'R'
-						? R.PAGE_START.RIGHT
-						: tokens[0] === 'T'
-						? R.PAGE_START.TOP
-						: R.PAGE_START.LEFT
-					: R.PAGE_START.RIGHT,
-			pageDirction:
-				tokens.length > 1
-					? tokens[1] === 'R' || tokens[1] === 'RL'
-						? R.PAGENATION.RIGHT2LEFT
-						: tokens[1] === 'T' || tokens[1] === 'TD'
-						? R.PAGENATION.TOP2DOWN
-						: R.PAGENATION.LEFT2LIGHT
-					: R.PAGENATION.RIGHT2LEFT,
+		const obj = {
+			pageStart: R.PAGE_START.RIGHT,
+			pageDirction: R.PAGENATION.RIGHT2LEFT,
 			pageSize: A4,
 			marginY: 25,
 			marginX: 5,
-			messages: [],
 			pages: [],
 			images: [],
 			page: null,
 			koma: null,
 			fukidashi: null,
-			comment: null,
 		};
+		obj[ATTR.MESSAGES] = [];
+		obj[ATTR.COMMENT] = null;
+		MangaNaimuParser.addObjValue('title', obj, cmdLine);
+		return obj;
 	}
-	static parseCmdLinePage() {
-		return { messages: [], page: null, koma: null, fukidashi: null, comment: null, images: [], komas: [] };
+	static addObjValue(level, obj = {}, cmdLine = '') {
+		console.log(`addObjValue level:${level} cmdLine:`, cmdLine);
+		const match = cmdLine.match(REGEXs[level]);
+		if (!match) {
+			return;
+		}
+		const dataText = match[1];
+		const tokens = dataText ? dataText.split(',') : [];
+		console.log(`addObjValue level:${level} dataText:`, dataText);
+		console.log(`addObjValue level:${level} tokens:`, tokens);
+		const m = INITIAL_MAP[level];
+		const names = INITIAL_MAP[`${level}_names`];
+		console.log(`addObjValue level:${level} m:`, m);
+		console.log(`addObjValue level:${level} names:`, names);
+		for (const token of tokens) {
+			console.log(`addObjValue level:${level} token:`, token);
+			const initial = MangaNaimuParser.getInitial(token);
+			console.log(`addObjValue level:${level} initial:`, initial);
+			if (!token) {
+				continue;
+			}
+			const value = MangaNaimuParser.getValue(token);
+			console.log(`addObjValue level:${level} value:`, value);
+			const v = m[initial];
+			const name = names[initial];
+			if (v) {
+				if (Array.isArray(v)) {
+					for (const r of v) {
+						const a = r[value];
+						if (a !== undefined) {
+							obj[name] = a;
+							break;
+						}
+					}
+				} else if (v === NUMERIC) {
+					obj[name] = Util.isNaN0(value);
+				} else if (v === SINGLE) {
+					obj[name] = true;
+				}
+			}
+		}
+	}
+	static parseCmdLinePage(cmdLine) {
+		console.log('parseCmdLinePage cmdLine:' + cmdLine);
+		const obj = { page: null, koma: null, fukidashi: null, images: [], komas: [] };
+		obj[ATTR.MESSAGES] = [];
+		obj[ATTR.COMMENT] = null;
+		MangaNaimuParser.addObjValue('page', obj, cmdLine);
+		return obj;
 	}
 	static parseCmdLineKoma(cmdLine) {
-		const match = cmdLine.match(REGEXs.formatKoma);
-		const dataText = match[1];
-		const tokens = dataText.split(':').join('').split(',');
-		const result = {
+		const obj = {
 			x: 0,
 			y: 0,
 			hight: 0,
@@ -190,91 +236,19 @@ export class MangaNaimuParser {
 			overPortlate: R.OVER_PORTRATE.NONE,
 			overLandscape: R.OVER_LANDSCAPE.NONE,
 			shape: R.SHAPE.RECTANGLE,
-			messages: [],
 			fukidashis: [],
 			images: [],
 			page: null,
 			koma: null,
 			fukidashi: null,
-			comment: null,
 		}; //xNN,yNN,wNN,hNN,bNN,a,pN,lN,S
-		console.log('cmdLine:', cmdLine);
-		console.log('dataText:', dataText);
-		console.log('tokens:', tokens);
-		for (const token of tokens) {
-			const intial = token ? token.split('')[0] : null;
-			if (!token) {
-				continue;
-			}
-			const value = token.substring(1);
-			console.log('token:', token, intial, value);
-			if (intial === R.KOMA.x) {
-				result.x = Util.isNaN0(value);
-			} else if (intial === R.KOMA.y) {
-				result.y = Util.isNaN0(value);
-			} else if (intial === R.KOMA.w) {
-				result.width = Util.isNaN0(value);
-			} else if (intial === R.KOMA.h) {
-				result.hight = Util.isNaN0(value);
-			} else if (intial === R.KOMA.b) {
-				result.borderWidth = Util.isNaN0(value);
-			} else if (intial === R.KOMA.p) {
-				result.overPortlate =
-					value === 'N'
-						? R.OVER_PORTRATE.NONE
-						: value === 'O'
-						? R.OVER_PORTRATE.OVER
-						: value === 'U'
-						? R.OVER_PORTRATE.UNDER
-						: value === 'B'
-						? R.OVER_PORTRATE.BOTH
-						: R.OVER_PORTRATE.NONE;
-			} else if (intial === R.KOMA.l) {
-				result.overLandscape =
-					value === 'N'
-						? R.OVER_LANDSCAPE.NONE
-						: value === 'L'
-						? R.OVER_LANDSCAPE.LEFT
-						: value === 'R'
-						? R.OVER_LANDSCAPE.RIGHT
-						: value === 'B'
-						? R.OVER_LANDSCAPE.BOTH
-						: R.OVER_LANDSCAPE.NONE;
-			} else if (intial === R.KOMA.s) {
-				result.shape =
-					value === 'R'
-						? R.SHAPE.RECTANGLE
-						: value === 'C'
-						? R.SHAPE.CIRCLE
-						: value === 'E'
-						? R.SHAPE.ELIPSE
-						: R.SHAPE.RECTANGLE;
-			} else if (intial === R.KOMA.f) {
-				result.frameStyle =
-					value === 'S'
-						? R.FRAME_STYLE.SOLID
-						: value === 'D'
-						? R.FRAME_STYLE.DOTTED
-						: value === 'H'
-						? R.FRAME_STYLE.HIDE
-						: R.FRAME_STYLE.SOLID;
-			} else if (intial === R.KOMA.a) {
-				result.isAbsolute = true;
-			}
-		}
-		if (result.isAbsolute && result.w === 0) {
-			result.w = 10;
-		}
-		if (result.isAbsolute && result.h === 0) {
-			result.h = 15;
-		}
-		return result;
+		obj[ATTR.MESSAGES] = [];
+		obj[ATTR.COMMENT] = null;
+		MangaNaimuParser.addObjValue('koma', obj, cmdLine);
+		return obj;
 	}
 	static parseCmdLineFukidashi(cmdLine) {
-		const match = cmdLine.match(REGEXs.formatFukidashi);
-		const dataText = match[1];
-		const tokens = dataText.split(':').join('').split(',');
-		const result = {
+		const obj = {
 			x: 0,
 			y: 0,
 			hight: 0,
@@ -286,92 +260,45 @@ export class MangaNaimuParser {
 			direction: 0,
 			isUnion: false,
 			tailInOut: R.TAIL.OUTSIDE,
-			messages: [],
 			images: [],
 			page: null,
 			koma: null,
 			fukidashi: null,
-			comment: null,
 		}; //xNN,yNN,wNN,hNN,bNN,a,pN,lN,S
-		for (const token of tokens) {
-			const intial = token ? token.split('')[0] : null;
-			if (!token) {
-				continue;
-			}
-			const value = token.substring(1);
-			if (intial === R.FUKIDASHI.x) {
-				result.x = Util.isNaN0(value);
-			} else if (intial === R.FUKIDASHI.y) {
-				result.y = Util.isNaN0(value);
-			} else if (intial === R.FUKIDASHI.w) {
-				result.width = Util.isNaN0(value);
-			} else if (intial === R.FUKIDASHI.h) {
-				result.hight = Util.isNaN0(value);
-			} else if (intial === R.FUKIDASHI.b) {
-				result.borderWidth = Util.isNaN0(value);
-			} else if (intial === R.FUKIDASHI.s) {
-				result.shape =
-					value === 'R'
-						? R.SHAPE.RECTANGLE
-						: value === 'C'
-						? R.SHAPE.CIRCLE
-						: value === 'E'
-						? R.SHAPE.ELIPSE
-						: R.SHAPE.RECTANGLE;
-			} else if (intial === R.FUKIDASHI.f) {
-				result.frameStyle =
-					value === 'S'
-						? R.FRAME_STYLE.SOLID
-						: value === 'D'
-						? R.FRAME_STYLE.DOTTED
-						: value === 'H'
-						? R.FRAME_STYLE.HIDE
-						: R.FRAME_STYLE.SOLID;
-			} else if (intial === R.FUKIDASHI.t) {
-				result.tailInOut =
-					value === 'O'
-						? R.TAIL.OUTSIDE
-						: value === 'I'
-						? R.TAIL.INSIDE
-						: value === 'N'
-						? R.TAIL.NONE
-						: R.TAIL.OUTSIDE;
-			} else if (intial === R.FUKIDASHI.d) {
-				result.isAbsolute = Util.isNaN0(value) % 360;
-			} else if (intial === R.FUKIDASHI.a) {
-				result.isAbsolute = true;
-			} else if (intial === R.FUKIDASHI.u) {
-				result.isUnion = true;
-			}
-		}
-		if (result.isAbsolute && result.w === 0) {
-			result.w = 10;
-		}
-		if (result.isAbsolute && result.h === 0) {
-			result.h = 15;
-		}
-		return result;
+		obj[ATTR.MESSAGES] = [];
+		obj[ATTR.COMMENT] = null;
+		MangaNaimuParser.addObjValue('fukidashi', obj, cmdLine);
+		return obj;
 	}
 	static parseCmdLineFukidashiEnd() {
-		return { messages: [], page: null, koma: null, fukidashi: null, comment: null };
+		const obj = { page: null, koma: null, fukidashi: null };
+		obj[ATTR.MESSAGES] = [];
+		obj[ATTR.COMMENT] = null;
+		return obj;
 	}
 	static parseSateOfRow(row) {
-		if (REGEXs.formatTitle.test(row)) {
+		if (REGEXs.title.test(row)) {
 			return R.STATUS.TITLE;
 		}
-		if (REGEXs.formatPage.test(row)) {
+		if (REGEXs.page.test(row)) {
 			return R.STATUS.PAGE;
 		}
-		if (REGEXs.formatKoma.test(row)) {
+		if (REGEXs.koma.test(row)) {
 			return R.STATUS.KOMA;
 		}
-		if (REGEXs.formatFukidashi.test(row)) {
+		if (REGEXs.fukidashi.test(row)) {
 			return R.STATUS.FUKIDASHI;
 		}
-		if (REGEXs.formatFukidashiEnd.test(row)) {
+		if (REGEXs.fukidashiEnd.test(row)) {
 			return R.STATUS.COMMENT;
 		}
 		return R.STATUS.NONE;
+	}
+	static getInitial(token) {
+		return token ? (token.indexOf(':') > 0 ? token.split(':')[0] : token.split('')[0]) : null;
+	}
+	static getValue(token) {
+		return token ? (token.indexOf(':') > 0 ? token.split(':')[1] : token.substring(1)) : null;
 	}
 }
 /**

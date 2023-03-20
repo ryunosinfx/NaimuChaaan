@@ -9,6 +9,7 @@ export class MainView {
 		console.log('MainView');
 		this.pagesElm = null;
 		this.editorTextAreaElm = null;
+		this.callbacks = [];
 		this.init();
 		this.second();
 	}
@@ -50,16 +51,19 @@ export class MainView {
 		this.pagesElm = pages;
 		this.PagesView = new PagesView(this.pagesElm);
 	}
+	getJoinCallBackFunc() {
+		return async (args) => {
+			for (const callback of this.callbacks) {
+				await callback(args);
+			}
+		};
+	}
 	buildEditor(contents) {
 		const editor = V.div('Editor', 'Editor');
 		V.append(contents, editor);
 		const maineditor = V.textarea('maineditor', 'maineditor');
 		V.append(editor, maineditor);
 		this.editorTextAreaElm = maineditor;
-		this.TextEditor = new TextEditor(maineditor);
-	}
-
-	buildView() {
-		V.c('');
+		this.TextEditor = new TextEditor(maineditor, this.getJoinCallBackFunc());
 	}
 }

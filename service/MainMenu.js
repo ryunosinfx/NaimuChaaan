@@ -32,7 +32,7 @@ export class MainMenu {
 			const cp = this.textareaElm.selectionStart;
 			console.log(cp);
 			const val = this.textareaElm.value + '';
-			const isOnNewRow = val.substring(cp - 1, cp) === '\n';
+			const isOnNewRow = val.substring(cp - 1, cp) === '\n' && cp > 0;
 			console.log(isOnNewRow);
 			this.textareaElm.value = val.slice(0, cp) + (isOnNewRow ? '' : '\n') + text + val.slice(cp);
 			this.textareaElm.focus();
