@@ -1,6 +1,7 @@
 import {
 	RR,
 	ReverseLookUpMap,
+	ReverseLookUpMap_DEFAULT_MAP,
 	LEVEL_PROPS,
 	Header,
 	LEVELS,
@@ -57,15 +58,22 @@ export class MangaNaimuStringifyer {
 						const tt = RR.get(t);
 						console.log(`stringify t:${t} tt:`, tt);
 						const lookupMap = ReverseLookUpMap[tt];
-						console.log(`stringify propMap[tt]:${propMap[tt]} lookupMap:`, lookupMap);
-						if (propMap[tt] !== undefined && lookupMap) {
+						console.log(
+							`stringify propMap[tt]:${propMap[tt]} ReverseLookUpMap_DEFAULT_MAP[tt]:${
+								ReverseLookUpMap_DEFAULT_MAP[tt]
+							} / value:${value} /${ReverseLookUpMap_DEFAULT_MAP[tt] === value + ''}lookupMap:`,
+							lookupMap
+						);
+						if (propMap[tt] !== undefined && lookupMap && ReverseLookUpMap_DEFAULT_MAP[tt] !== value + '') {
 							const label = lookupMap[value];
-							MangaNaimuStringifyer.vals.push(`${key}:${label}`);
+							if (ReverseLookUpMap_DEFAULT_MAP[tt] !== value) {
+								MangaNaimuStringifyer.vals.push(` ${key}:${label}`);
+							}
 							break;
 						}
 					}
 				} else if (type === NUMERIC) {
-					MangaNaimuStringifyer.vals.push(`${key}:${value}`);
+					MangaNaimuStringifyer.vals.push(` ${key}:${value}`);
 				} else if (type === SINGLE) {
 					if (value === true) MangaNaimuStringifyer.vals.push(`${key}`);
 				}

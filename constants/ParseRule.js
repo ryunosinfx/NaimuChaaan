@@ -227,6 +227,7 @@ export const ReverseLookUpMap = {
 	KOMA: {},
 	FUKIDASHI: {},
 };
+export const ReverseLookUpMap_DEFAULT_MAP = {};
 export const LEVELS = ['title', 'page', 'koma', 'fukidashi'];
 export const LEVEL_PROPS = {
 	title: { PAGE_START: '', PAGE_START_S: '', PAGENATION: '0', PAGENATION_S: '0' },
@@ -275,6 +276,13 @@ function build() {
 	for (const key in R.TAIL_S) {
 		const value = R.TAIL_S[key];
 		ReverseLookUpMap.TAIL[value] = key;
+	}
+	for (const key in ReverseLookUpMap) {
+		const map = ReverseLookUpMap[key];
+		for (const mkey in map) {
+			ReverseLookUpMap_DEFAULT_MAP[key] = mkey;
+			break;
+		}
 	}
 }
 build();
